@@ -1,0 +1,138 @@
+
+{
+  "entities": {
+    "user": {
+      "title": "User",
+      "description": "A user of the application",
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string",
+          "description": "The user's display name"
+        },
+        "email": {
+          "type": "string",
+          "format": "email",
+          "description": "The user's email address"
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "The timestamp when the user was created"
+        }
+      },
+      "required": ["name", "email", "createdAt"]
+    },
+    "device": {
+      "title": "Device",
+      "description": "An energy-consuming device",
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "type": {
+          "type": "string"
+        },
+        "consumption": {
+          "type": "number"
+        },
+        "status": {
+          "type": "string",
+          "enum": ["online", "offline"]
+        },
+        "schedule": {
+          "type": "object",
+          "properties": {
+            "start": {
+              "type": "string"
+            },
+            "end": {
+              "type": "string"
+            }
+          }
+        },
+        "threshold": {
+            "type": "number",
+            "description": "Optional power consumption threshold in watts to trigger automation."
+        }
+      },
+      "required": ["name", "type", "consumption", "status", "schedule"]
+    },
+    "sensorData": {
+        "title": "Sensor Data",
+        "description": "Time-series data from an energy sensor",
+        "type": "object",
+        "properties": {
+            "deviceId": {
+                "type": "string"
+            },
+            "timestamp": {
+                "type": "string",
+                "format": "date-time"
+            },
+            "voltage": {
+                "type": "number"
+            },
+            "current": {
+                "type": "number"
+            },
+            "power": {
+                "type": "number"
+            }
+        },
+        "required": ["deviceId", "timestamp", "voltage", "current", "power"]
+    },
+    "report": {
+        "title": "Report",
+        "description": "A user-submitted issue report",
+        "type": "object",
+        "properties": {
+            "description": {
+                "type": "string"
+            },
+            "createdAt": {
+                "type": "string",
+                "format": "date-time"
+            },
+            "status": {
+                "type": "string",
+                "enum": ["new", "in-progress", "resolved", "ignored"]
+            },
+            "userId": {
+                "type": "string"
+            }
+        },
+        "required": ["description", "createdAt", "status", "userId"]
+    }
+  },
+  "auth": {
+    "providers": ["email"]
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": {
+        "$ref": "#/entities/user"
+      },
+      "description": "Stores user profile information."
+    },
+    "/devices/{deviceId}": {
+      "schema": {
+        "$ref": "#/entities/device"
+      },
+      "description": "Stores information about registered office devices."
+    },
+    "/sensor-data/{readingId}": {
+      "schema": {
+        "$ref": "#/entities/sensorData"
+      },
+      "description": "Stores time-series data from the ESP32 energy sensor."
+    },
+    "/reports/{reportId}": {
+        "schema": {
+            "$ref": "#/entities/report"
+        },
+        "description": "Stores user-submitted issue reports."
+    }
+  }
+}
