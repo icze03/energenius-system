@@ -13,27 +13,10 @@ import {
   orderBy,
 } from 'firebase/firestore';
 import { DeviceCard } from '@/components/devices/device-card';
-import { AddDeviceDialog } from '@/components/devices/add-device-dialog';
 import { DiscoveryDialog } from '@/components/devices/discovery-dialog';
-import {
-  Lightbulb,
-  Snowflake,
-  Tv,
-  Server,
-  PlusCircle,
-  Laptop,
-  PlugZap,
-  Wifi,
-} from 'lucide-react';
+import { PlugZap, Wifi } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import {
-  Accordion,
-  AccordionContent,
-  AccordionItem,
-  AccordionTrigger,
-} from '@/components/ui/accordion';
-import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/card';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -44,6 +27,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
+import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/card';
 
 export interface Device {
   id: string;
@@ -54,32 +38,14 @@ export interface Device {
   consumption: number;
   schedule: { start: string; end: string };
   threshold?: number;
-  tuyaDeviceId?: string; // FIX: added so commands target the right plug
+  tuyaDeviceId?: string;
 }
 
 export type DeviceDocument = Omit<Device, 'id' | 'icon'>;
 
-const getIconForType = (type: string): LucideIcon => {
-  switch (type) {
-    case 'Smart Plug':
-      return PlugZap;
-    case 'Lighting System':
-      return Lightbulb;
-    case 'Climate Control':
-      return Snowflake;
-    case 'AV Equipment':
-      return Tv;
-    case 'IT Infrastructure':
-      return Server;
-    default:
-      return Laptop;
-  }
-};
-
 export default function DevicesPage() {
   const [devices, setDevices] = useState<Device[]>([]);
   const [loading, setLoading] = useState(true);
-  const [isAddDeviceDialogOpen, setIsAddDeviceDialogOpen] = useState(false);
   const [isDiscoveryOpen, setIsDiscoveryOpen] = useState(false);
   const [isConfirmDialogOpen, setIsConfirmDialogOpen] = useState(false);
   const [deviceToRemove, setDeviceToRemove] = useState<Device | null>(null);
@@ -89,9 +55,9 @@ export default function DevicesPage() {
     const unsubscribe = onSnapshot(
       q,
       (snapshot) => {
-        const devicesData: Device[] = snapshot.docs.map((doc) => {
-          const data = doc.data() as DeviceDocument;
-          return { ...data, id: doc.id, icon: getIconForType(data.type) };
+        const devicesData: Device[] = snapshot.docs.map((d) => {
+          const data = d.data() as DeviceDocument;
+          return { ...data, id: d.id, icon: PlugZap };
         });
         setDevices(devicesData);
         setLoading(false);
@@ -105,14 +71,14 @@ export default function DevicesPage() {
   }, []);
 
   const handleAddDevice = async (
-    newDevice: Omit<Device, 'id' | 'icon' | 'status' | 'schedule'>
+    newDevice: { name: string; type: string; consumption: number; tuyaDeviceId: string }
   ) => {
     try {
       const deviceData: DeviceDocument = {
         ...newDevice,
         status: 'online',
-        schedule: { start: '09:00', end: '18:00' },
-        threshold: newDevice.consumption ? newDevice.consumption * 1.5 : 1000,
+        schedule: { start: '00:00', end: '23:59' },
+        threshold: 2000,
       };
       await addDoc(collection(db, 'devices'), deviceData);
     } catch (error) {
@@ -145,34 +111,20 @@ export default function DevicesPage() {
     }
   };
 
-  const groupedDevices = devices.reduce(
-    (acc, device) => {
-      (acc[device.type] = acc[device.type] || []).push(device);
-      return acc;
-    },
-    {} as Record<string, Device[]>
-  );
-
-  const deviceTypes = Object.keys(groupedDevices);
-
   return (
     <>
       <div className="space-y-6">
         <Card>
           <CardHeader>
-            <CardTitle>Device Control Center</CardTitle>
+            <CardTitle>Smart Plug Control</CardTitle>
             <CardDescription>
-              Discover your Tuya smart plugs or add other office equipment manually.
+              Discover and manage your Tuya smart plugs. Use the toggle on each card to turn plugs on or off remotely.
             </CardDescription>
           </CardHeader>
-          <CardContent className="flex flex-wrap gap-4">
+          <CardContent>
             <Button onClick={() => setIsDiscoveryOpen(true)} className="bg-primary hover:bg-primary/90">
               <Wifi className="mr-2 h-4 w-4" />
               Discover Smart Plugs
-            </Button>
-            <Button onClick={() => setIsAddDeviceDialogOpen(true)} variant="outline">
-              <PlusCircle className="mr-2 h-4 w-4" />
-              Manual Add
             </Button>
           </CardContent>
         </Card>
@@ -181,47 +133,28 @@ export default function DevicesPage() {
           <div className="flex h-[300px] items-center justify-center">
             <p className="text-muted-foreground">Loading devices...</p>
           </div>
-        ) : deviceTypes.length > 0 ? (
-          <Accordion type="multiple" defaultValue={deviceTypes} className="w-full space-y-4">
-            {deviceTypes.map((type) => (
-              <AccordionItem key={type} value={type} className="border-none">
-                <Card>
-                  <AccordionTrigger className="p-6 text-lg font-medium">
-                    {type} ({groupedDevices[type].length})
-                  </AccordionTrigger>
-                  <AccordionContent className="p-6 pt-0">
-                    <div className="grid gap-6 sm:grid-cols-1 md:grid-cols-2 lg:grid-cols-3">
-                      {groupedDevices[type].map((device) => (
-                        <DeviceCard
-                          key={device.id}
-                          device={device}
-                          onRemove={openConfirmationDialog}
-                          onUpdateDevice={handleUpdateDevice}
-                        />
-                      ))}
-                    </div>
-                  </AccordionContent>
-                </Card>
-              </AccordionItem>
+        ) : devices.length > 0 ? (
+          <div className="grid gap-6 sm:grid-cols-1 md:grid-cols-2 lg:grid-cols-3">
+            {devices.map((device) => (
+              <DeviceCard
+                key={device.id}
+                device={device}
+                onRemove={openConfirmationDialog}
+                onUpdateDevice={handleUpdateDevice}
+              />
             ))}
-          </Accordion>
+          </div>
         ) : (
           <div className="flex h-[300px] items-center justify-center rounded-lg border-2 border-dashed border-muted-foreground/30">
             <div className="text-center">
               <Wifi className="mx-auto h-12 w-12 text-muted-foreground/50 mb-4" />
-              <h3 className="text-xl font-semibold">No Devices Connected</h3>
-              <p className="text-muted-foreground mt-2">
-                Start by discovering your smart plugs or adding a device manually.
+              <h3 className="text-xl font-semibold">No Smart Plugs Connected</h3>
+              <p className="text-muted-foreground mt-2 max-w-sm">
+                Click "Discover Smart Plugs" to scan your Tuya account and link your devices.
               </p>
             </div>
           </div>
         )}
-
-        <AddDeviceDialog
-          isOpen={isAddDeviceDialogOpen}
-          onClose={() => setIsAddDeviceDialogOpen(false)}
-          onAddDevice={handleAddDevice}
-        />
 
         <DiscoveryDialog
           isOpen={isDiscoveryOpen}
@@ -233,9 +166,9 @@ export default function DevicesPage() {
       <AlertDialog open={isConfirmDialogOpen} onOpenChange={setIsConfirmDialogOpen}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Are you sure?</AlertDialogTitle>
+            <AlertDialogTitle>Remove this plug?</AlertDialogTitle>
             <AlertDialogDescription>
-              This will permanently delete &quot;{deviceToRemove?.name}&quot; from your account.
+              This will remove &quot;{deviceToRemove?.name}&quot; from your dashboard. You can re-add it anytime via discovery.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
@@ -244,7 +177,7 @@ export default function DevicesPage() {
               onClick={handleRemoveDevice}
               className="bg-destructive text-destructive-foreground"
             >
-              Delete Device
+              Remove
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

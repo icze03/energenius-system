@@ -1,4 +1,3 @@
-
 'use client';
 
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -17,25 +16,15 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useEffect, useState } from "react";
 import { Mail, Phone, Settings as SettingsIcon } from "lucide-react";
 import { useAuth } from "@/hooks/use-auth";
-import { doc, getDoc, setDoc, collection, onSnapshot, query, orderBy } from "firebase/firestore";
-import { db } from "@/lib/firebase";
+import { doc, getDoc, setDoc } from "firebase/firestore";
+import { db, auth } from "@/lib/firebase";
 import { signOut } from "firebase/auth";
-import { auth } from "@/lib/firebase";
 import { ReportIssueForm } from "@/components/settings/report-issue-form";
 import { Separator } from "@/components/ui/separator";
-import type { Device } from "@/app/devices/page";
-import { DeviceSimulatorCard } from "@/components/devices/device-simulator-card";
-
 
 const profileFormSchema = z.object({
-  name: z.string().min(2, {
-    message: "Name must be at least 2 characters.",
-  }),
-  email: z
-    .string({
-      required_error: "Please enter an email.",
-    })
-    .email(),
+  name: z.string().min(2, { message: "Name must be at least 2 characters." }),
+  email: z.string({ required_error: "Please enter an email." }).email(),
 });
 
 type ProfileFormValues = z.infer<typeof profileFormSchema>;
@@ -47,7 +36,6 @@ export default function SettingsPage() {
   const { user, loading } = useAuth();
   const [lastLogin, setLastLogin] = useState<string | null>(null);
   const [kwhPrice, setKwhPrice] = useState<string>('');
-  const [devices, setDevices] = useState<Device[]>([]);
 
   const form = useForm<ProfileFormValues>({
     resolver: zodResolver(profileFormSchema),
@@ -56,214 +44,128 @@ export default function SettingsPage() {
   });
 
   useEffect(() => {
-    // Load kWh price from local storage
     const savedPrice = localStorage.getItem('phpPerKwh');
-    if (savedPrice) {
-      setKwhPrice(savedPrice);
-    }
+    if (savedPrice) setKwhPrice(savedPrice);
 
     if (user && !loading) {
-      // This will only run on the client, after hydration
       if (user.metadata.lastSignInTime) {
-           setLastLogin(new Date(user.metadata.lastSignInTime).toLocaleString());
+        setLastLogin(new Date(user.metadata.lastSignInTime).toLocaleString());
       }
-      
       const fetchProfile = async () => {
-          const userDocRef = doc(db, "users", user.uid);
-          const userDocSnap = await getDoc(userDocRef);
-          if (userDocSnap.exists()) {
-              const userData = userDocSnap.data();
-              form.reset({
-                  name: userData.name || user.displayName || '',
-                  email: userData.email || user.email || '',
-              });
-          } else {
-               form.reset({
-                  name: user.displayName || '',
-                  email: user.email || '',
-              });
-          }
+        const userDocRef = doc(db, "users", user.uid);
+        const userDocSnap = await getDoc(userDocRef);
+        if (userDocSnap.exists()) {
+          const userData = userDocSnap.data();
+          form.reset({ name: userData.name || user.displayName || '', email: userData.email || user.email || '' });
+        } else {
+          form.reset({ name: user.displayName || '', email: user.email || '' });
+        }
       };
       fetchProfile();
     }
   }, [user, loading, form]);
 
-  useEffect(() => {
-    const q = query(collection(db, "devices"), orderBy("name"));
-    const unsubscribe = onSnapshot(q, (querySnapshot) => {
-      const devicesData: Device[] = [];
-      querySnapshot.forEach((doc) => {
-        const data = doc.data() as any;
-        devicesData.push({ ...data, id: doc.id });
-      });
-      setDevices(devicesData);
-    });
-
-    return () => unsubscribe();
-  }, []);
-
-
   async function onProfileSubmit(data: ProfileFormValues) {
     if (!user) {
-      toast({
-        variant: "destructive",
-        title: "Error",
-        description: "You must be logged in to update your profile.",
-      });
+      toast({ variant: "destructive", title: "Error", description: "You must be logged in to update your profile." });
       return;
     }
-
     try {
-      const userDocRef = doc(db, "users", user.uid);
-      await setDoc(userDocRef, { name: data.name }, { merge: true });
-      toast({
-        title: "Profile updated!",
-        description: "Your company profile has been successfully updated.",
-      });
+      await setDoc(doc(db, "users", user.uid), { name: data.name }, { merge: true });
+      toast({ title: "Profile updated!", description: "Your company profile has been successfully updated." });
     } catch (error) {
-      console.error("Error updating profile: ", error);
-      toast({
-        variant: "destructive",
-        title: "Error",
-        description: "Could not update your profile. Please try again.",
-      });
+      toast({ variant: "destructive", title: "Error", description: "Could not update your profile. Please try again." });
     }
   }
 
   const handleLogout = async () => {
     try {
-        await signOut(auth);
-        toast({
-        title: "Logged Out",
-        description: "You have been successfully logged out.",
-        });
-        router.push('/');
+      await signOut(auth);
+      toast({ title: "Logged Out", description: "You have been successfully logged out." });
+      router.push('/');
     } catch (error) {
-        console.error("Logout error: ", error);
-         toast({
-            variant: "destructive",
-            title: "Error",
-            description: "Failed to log out. Please try again.",
-        });
+      toast({ variant: "destructive", title: "Error", description: "Failed to log out. Please try again." });
     }
   };
 
   const handleSaveRate = () => {
     if (kwhPrice === '' || isNaN(parseFloat(kwhPrice))) {
-      toast({
-        variant: 'destructive',
-        title: 'Invalid Input',
-        description: 'Please enter a valid number for the kWh price.',
-      });
+      toast({ variant: 'destructive', title: 'Invalid Input', description: 'Please enter a valid number for the kWh price.' });
       return;
     }
     localStorage.setItem('phpPerKwh', kwhPrice);
-    toast({
-      title: 'Rate Saved!',
-      description: `Electricity rate has been set to ₱${kwhPrice}/kWh. Dashboard will now use this rate.`,
-    });
+    toast({ title: 'Rate Saved!', description: `Electricity rate set to ₱${kwhPrice}/kWh.` });
   };
 
-  if (loading) {
-      return <div className="flex h-full w-full items-center justify-center">Loading settings...</div>
-  }
-
-  if (!user) {
-    // AppLayout handles redirection, so we can return null here while it redirects.
-    return null;
-  }
+  if (loading) return <div className="flex h-full w-full items-center justify-center">Loading settings...</div>;
+  if (!user) return null;
 
   return (
     <div className="space-y-6">
-       <CardHeader className="px-0">
-          <CardTitle>Settings</CardTitle>
-          <CardDescription>
-            Manage your account settings and application preferences.
-          </CardDescription>
-        </CardHeader>
+      <CardHeader className="px-0">
+        <CardTitle>Settings</CardTitle>
+        <CardDescription>Manage your account settings and application preferences.</CardDescription>
+      </CardHeader>
+
       <Tabs defaultValue="profile" className="w-full">
         <TabsList>
           <TabsTrigger value="profile">Profile</TabsTrigger>
           <TabsTrigger value="appearance">Appearance</TabsTrigger>
-          <TabsTrigger value="general">General Settings</TabsTrigger>
+          <TabsTrigger value="general">General</TabsTrigger>
           <TabsTrigger value="support">Support</TabsTrigger>
           <TabsTrigger value="account">Account</TabsTrigger>
         </TabsList>
+
         <TabsContent value="profile">
           <Card>
-             <CardHeader>
+            <CardHeader>
               <CardTitle>Profile</CardTitle>
-              <CardDescription>
-                Update your company's public information.
-              </CardDescription>
+              <CardDescription>Update your company's public information.</CardDescription>
             </CardHeader>
             <CardContent>
               <Form {...form}>
                 <form onSubmit={form.handleSubmit(onProfileSubmit)} className="space-y-4">
-                  <FormField
-                    control={form.control}
-                    name="name"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Company Name</FormLabel>
-                        <FormControl>
-                          <Input placeholder="Your company name" {...field} />
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-                  <FormField
-                    control={form.control}
-                    name="email"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Contact Email</FormLabel>
-                        <FormControl>
-                          <Input placeholder="contact@yourcompany.com" {...field} disabled />
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
+                  <FormField control={form.control} name="name" render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Company Name</FormLabel>
+                      <FormControl><Input placeholder="Your company name" {...field} /></FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )} />
+                  <FormField control={form.control} name="email" render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Contact Email</FormLabel>
+                      <FormControl><Input placeholder="contact@yourcompany.com" {...field} disabled /></FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )} />
                   <Button type="submit">Update Profile</Button>
                 </form>
               </Form>
             </CardContent>
           </Card>
         </TabsContent>
+
         <TabsContent value="appearance">
-           <Card>
-             <CardHeader>
+          <Card>
+            <CardHeader>
               <CardTitle>Appearance</CardTitle>
-              <CardDescription>
-                Customize the look and feel of the application.
-              </CardDescription>
+              <CardDescription>Customize the look and feel of the application.</CardDescription>
             </CardHeader>
             <CardContent>
-               <div className="space-y-4">
+              <div className="space-y-4">
                 <Label className="text-base font-medium">Theme</Label>
                 <p className="text-sm text-muted-foreground">Select the theme for the application.</p>
-                <RadioGroup
-                  defaultValue={theme}
-                  className="grid max-w-md grid-cols-2 gap-4 pt-2"
-                  onValueChange={setTheme}
-                >
+                <RadioGroup defaultValue={theme} className="grid max-w-md grid-cols-2 gap-4 pt-2" onValueChange={setTheme}>
                   <div>
                     <RadioGroupItem value="light" id="light" className="peer sr-only" />
-                    <Label
-                      htmlFor="light"
-                      className="flex flex-col items-center justify-between rounded-md border-2 border-muted bg-popover p-4 hover:bg-accent hover:text-accent-foreground peer-data-[state=checked]:border-primary [&:has([data-state=checked])]:border-primary"
-                    >
+                    <Label htmlFor="light" className="flex flex-col items-center justify-between rounded-md border-2 border-muted bg-popover p-4 hover:bg-accent hover:text-accent-foreground peer-data-[state=checked]:border-primary [&:has([data-state=checked])]:border-primary">
                       Light
                     </Label>
                   </div>
                   <div>
                     <RadioGroupItem value="dark" id="dark" className="peer sr-only" />
-                    <Label
-                      htmlFor="dark"
-                      className="flex flex-col items-center justify-between rounded-md border-2 border-muted bg-popover p-4 hover:bg-accent hover:text-accent-foreground peer-data-[state=checked]:border-primary [&:has([data-state=checked])]:border-primary"
-                    >
+                    <Label htmlFor="dark" className="flex flex-col items-center justify-between rounded-md border-2 border-muted bg-popover p-4 hover:bg-accent hover:text-accent-foreground peer-data-[state=checked]:border-primary [&:has([data-state=checked])]:border-primary">
                       Dark
                     </Label>
                   </div>
@@ -272,52 +174,44 @@ export default function SettingsPage() {
             </CardContent>
           </Card>
         </TabsContent>
+
         <TabsContent value="general">
-           <Card>
-             <CardHeader>
+          <Card>
+            <CardHeader>
               <CardTitle>General Settings</CardTitle>
-              <CardDescription>
-                Manage application-wide settings and data simulation.
-              </CardDescription>
+              <CardDescription>Configure billing rate for cost estimations.</CardDescription>
             </CardHeader>
             <CardContent className="space-y-6">
-                <div>
-                  <h3 className="text-lg font-medium mb-2">Billing Rate</h3>
-                  <p className="text-sm text-muted-foreground mb-4">Set the electricity rate to ensure cost estimations are accurate. This should be based on your latest bill from your provider (e.g., Meralco).</p>
-                  <div className='flex items-center space-x-2 max-w-sm'>
-                      <Label htmlFor="kwh-price" className="text-muted-foreground">₱</Label>
-                      <Input
-                          id="kwh-price"
-                          type="number"
-                          placeholder="e.g., 11.50"
-                          value={kwhPrice}
-                          onChange={(e) => setKwhPrice(e.target.value)}
-                      />
-                      <span className="text-muted-foreground">/ kWh</span>
-                  </div>
-                  <Button onClick={handleSaveRate} className="mt-4">
-                      <SettingsIcon className="mr-2 h-4 w-4" />
-                      Save Rate
-                  </Button>
+              <div>
+                <h3 className="text-lg font-medium mb-2">Billing Rate</h3>
+                <p className="text-sm text-muted-foreground mb-4">
+                  Set the electricity rate to ensure cost estimations are accurate. Based on your latest bill (e.g., Meralco).
+                </p>
+                <div className="flex items-center space-x-2 max-w-sm">
+                  <Label htmlFor="kwh-price" className="text-muted-foreground">₱</Label>
+                  <Input
+                    id="kwh-price"
+                    type="number"
+                    placeholder="e.g., 11.50"
+                    value={kwhPrice}
+                    onChange={(e) => setKwhPrice(e.target.value)}
+                  />
+                  <span className="text-muted-foreground">/ kWh</span>
                 </div>
-                <Separator />
-                <div>
-                  <h3 className="text-lg font-medium mb-2">Device Simulator</h3>
-                  <p className="text-sm text-muted-foreground mb-4">
-                    Use this to generate sample sensor data for testing without physical hardware. This acts as a mock power meter feed.
-                  </p>
-                  <DeviceSimulatorCard devices={devices} />
-                </div>
+                <Button onClick={handleSaveRate} className="mt-4">
+                  <SettingsIcon className="mr-2 h-4 w-4" />
+                  Save Rate
+                </Button>
+              </div>
             </CardContent>
           </Card>
         </TabsContent>
+
         <TabsContent value="support">
           <Card>
             <CardHeader>
               <CardTitle>Contact Support</CardTitle>
-              <CardDescription>
-                Have a question or need help? Reach out to us or submit a report.
-              </CardDescription>
+              <CardDescription>Have a question or need help? Reach out to us or submit a report.</CardDescription>
             </CardHeader>
             <CardContent className="space-y-6">
               <div className="flex items-center space-x-4 rounded-md border p-4">
@@ -339,15 +233,15 @@ export default function SettingsPage() {
               <Separator />
               <div>
                 <h3 className="text-lg font-medium mb-2">Report an Issue</h3>
-                 <ReportIssueForm />
+                <ReportIssueForm />
               </div>
-
             </CardContent>
           </Card>
         </TabsContent>
+
         <TabsContent value="account">
           <Card>
-             <CardHeader>
+            <CardHeader>
               <CardTitle>Account</CardTitle>
               <CardDescription>
                 Manage your account and log out.
@@ -357,7 +251,7 @@ export default function SettingsPage() {
             <CardContent>
               <div className="space-y-4">
                 <Label className="text-base font-medium">Log Out</Label>
-                  <p className="text-sm text-muted-foreground">You will be returned to the login screen.</p>
+                <p className="text-sm text-muted-foreground">You will be returned to the login screen.</p>
                 <Button variant="destructive" onClick={handleLogout}>Log Out</Button>
               </div>
             </CardContent>

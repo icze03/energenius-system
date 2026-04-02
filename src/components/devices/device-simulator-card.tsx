@@ -1,11 +1,10 @@
-
 'use client';
 
 import { useState, useEffect, useRef } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Play, Square, RefreshCw, Zap } from 'lucide-react';
-import { collection, addDoc, serverTimestamp, query, where, getDocs, writeBatch, doc } from 'firebase/firestore';
+import { collection, addDoc, Timestamp, query, where, getDocs, writeBatch, doc } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import { useToast } from '@/hooks/use-toast';
 import { Badge } from '../ui/badge';
@@ -74,7 +73,7 @@ export function DeviceSimulatorCard({ devices }: DeviceSimulatorCardProps) {
 
             const reading = {
                 deviceId: device.name,
-                timestamp: serverTimestamp(),
+                timestamp: Timestamp.now(),
                 voltage: parseFloat(voltage.toFixed(2)),
                 current: parseFloat(current.toFixed(2)),
                 power: parseFloat(power.toFixed(2)),
